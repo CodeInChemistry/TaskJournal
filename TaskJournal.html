@@ -337,7 +337,7 @@
             if (dayTodos.length > 0) {
                 const dots = Array(Math.min(dayTodos.length, 5)).fill('<div class="dot"></div>').join('');
                 indicatorHtml = `<div class="task-indicator">${dots}</div>`;
-                indicatorHtml += incompleteCount > 0 ? `<div class="task-count">${incompleteCount} imcomplete</div>` : `<div class="task-count">Done ✅</div>`;
+                indicatorHtml += incompleteCount > 0 ? `<div class="task-count">${incompleteCount} todos</div>` : `<div class="task-count">Done ✅</div>`;
             }
             cell.innerHTML = `<div class="day-number">${cellDate.getDate()}</div>${indicatorHtml}`;
             cell.onclick = () => { currentDateObj = parseStringToDate(dateStr); switchView('day'); };
