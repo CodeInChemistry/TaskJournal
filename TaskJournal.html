@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Journal</title>
+    <style>
+        /* ==================== 基础变量定义 (极简森系) ==================== */
+        :root {
+            --bg-body: #f0f4f0; --bg-container: #ffffff; --primary: #55efc4; --accent: #00b894;
+            --text-main: #2d3436; --text-muted: #636e72; --border: #dfe6e9;
+            --shadow: 0 8px 20px rgba(0,0,0,0.05); --radius: 12px; --today-bg: #e6fffa;
+            --font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            --p-high: #ff7675; --p-medium: #fdcb6e; --p-low: #74b9ff;
+        }
+        /* 赛博暗夜主题 */
+        [data-theme="cyber"] {
+            --bg-body: #1e1e2e; --bg-container: #2d2d44; --primary: #bb86fc; --accent: #03dac6;
+            --text-main: #e0e0e0; --text-muted: #a0a0a0; --border: #44445e;
+            --shadow: 0 8px 20px rgba(0,0,0,0.3); --today-bg: #3c3c5a;
+            --p-high: #cf6679; --p-medium: #e0b85c; --p-low: #5da8f5;
+        }
+        /* 复古牛皮纸主题 */
+        [data-theme="vintage"] {
+            --bg-body: #e6ddc5; --bg-container: #fdfbf7; --primary: #d35400; --accent: #a04000;
+            --text-main: #4a3b2a; --text-muted: #8c7b66; --border: #dcd0b8;
+            --shadow: 5px 5px 0px rgba(74, 59, 42, 0.1); --radius: 4px;
+            --font-family: "Georgia", "Songti SC", serif; --today-bg: #f3ead3;
+            --p-high: #c0392b; --p-medium: #d35400; --p-low: #2980b9;
+        }
+
+        body { font-family: var(--font-family); background-color: var(--bg-body); color: var(--text-main); margin: 0; padding: 20px; display: flex; justify-content: center; transition: background 0.3s, color 0.3s; }
+        .container { width: 100%; max-width: 800px; background: var(--bg-container); padding: 30px; border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); transition: all 0.3s; }
+        h1 { text-align: center; margin-top: 0; color: var(--text-main); }
+
+        /* 组件样式 */
+        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
+        .nav-group, .action-group { display: flex; align-items: center; gap: 8px; }
+        button { cursor: pointer; border: none; font-family: inherit; transition: transform 0.1s; }
+        button:active { transform: scale(0.96); }
+        .btn-primary { background-color: var(--primary); color: #fff; padding: 10px 20px; border-radius: var(--radius); font-size: 16px; }
+        .btn-primary:hover { background-color: var(--accent); }
+        .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 6px 12px; border-radius: var(--radius); font-size: 13px; }
+        .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-active { background-color: var(--primary); color: white; border-color: var(--primary); }
+        input[type="date"], select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-container); color: var(--text-main); font-family: inherit; }
+        
+        
+        .day-view-layout {
+            display: flex;             /* 启用弹性布局，让子元素横向排列 */
+            gap: 25px;                 /* 左右两栏之间的间距 */
+            align-items: flex-start;   /* 顶部对齐 */
+        }
+
+        .left-panel {
+            flex: 0 0 35%;             /* 左侧固定占 35% 的宽度 */
+            min-width: 280px;          /* 防止窗口过窄时挤压变形 */
+            
+            /* 👇 核心修改：让左侧面板内部的控件从上到下纵向排列 */
+            display: flex;
+            flex-direction: column;    
+            gap: 15px;                 /* 控件组之间的上下间距 */
+        }
+
+        /* 强制让 input-group 内部也变成纵向排列，确保标签在输入框上方 */
+        .left-panel .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 0;          /* 移除原有的底部间距 */
+        }
+
+        /* 让最底下的“添加”按钮横向撑满，视觉上更整齐 */
+        .left-panel .btn-primary {
+            width: 100%;
+        }
+
+        .right-panel {
+            flex: 1;                   /* 右侧自动占据剩余空间 */
+            border-left: 1px dashed var(--border); /* 虚线分割线 */
+            padding-left: 25px;        /* 分割线与内容的间距 */
+        }
+
+        /* 适配手机端：当屏幕小于 768px 时，自动恢复为上下布局 */
+        @media (max-width: 768px) {
+            .day-view-layout {
+                flex-direction: column;
+            }
+            .left-panel, .right-panel {
+                width: 100%;
+                border-left: none;
+                padding-left: 0;
+                min-width: auto;       /* 手机端取消最小宽度限制 */
+            }
+            .left-panel {
+                margin-bottom: 20px;
+                border-bottom: 1px dashed var(--border);
+                padding-bottom: 20px;
+            }
+        }
+        
+        .input-group { display: flex; gap: 10px; margin-bottom: 25px; }
+        #taskInput { flex: 1; padding: 12px; border: 2px solid var(--border); border-radius: var(--radius); outline: none; font-size: 16px; background: var(--bg-container); color: var(--text-main); }
+        #taskInput:focus { border-color: var(--primary); }
+
+        ul { list-style: none; padding: 0; }
+        li { display: flex; align-items: center; padding: 12px; border-bottom: 1px dashed var(--border); animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .task-checkbox { margin-right: 15px; width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+        .task-info { flex: 1; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+        .task-title { font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 8px; }
+        .task-desc-preview { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%; }
+        .completed .task-title { text-decoration: line-through; color: var(--text-muted); opacity: 0.6; }
+        .delete-btn { background: none; color: #ff7675; font-size: 20px; padding: 0 8px; }
+        .empty-msg { text-align: center; color: var(--text-muted); margin-top: 30px; font-style: italic; }
+        #fileInput { display: none; }
+
+        /* 优先级圆点 */
+        .priority-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .p-high { background-color: var(--p-high); }
+        .p-medium { background-color: var(--p-medium); }
+        .p-low { background-color: var(--p-low); }
+
+        /* 日历样式 */
+        .calendar-header { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-weight: bold; margin-bottom: 10px; color: var(--text-muted); }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+        .calendar-day { border: 1px solid var(--border); border-radius: var(--radius); min-height: 80px; padding: 8px; position: relative; cursor: pointer; transition: background 0.2s; display: flex; flex-direction: column; }
+        .calendar-day:hover { background-color: var(--today-bg); border-color: var(--primary); }
+        .calendar-day.today { background-color: var(--today-bg); border-color: var(--accent); font-weight: bold; }
+        .day-number { font-size: 14px; margin-bottom: 5px; }
+        .task-indicator { display: flex; gap: 3px; flex-wrap: wrap; margin-top: auto; }
+        .dot { width: 6px; height: 6px; border-radius: 50%; background-color: var(--primary); }
+        .task-count { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+
+        /* 详情弹窗样式 */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: var(--bg-container); padding: 25px; border-radius: var(--radius); width: 90%; max-width: 400px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+        .modal h3 { margin-top: 0; }
+        .modal textarea { width: 100%; height: 100px; padding: 10px; margin: 10px 0; border: 1px solid var(--border); border-radius: var(--radius); resize: vertical; background: var(--bg-container); color: var(--text-main); font-family: inherit; box-sizing: border-box;}
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📝 Tasks</h1>
+    <!-- 顶部控制区 -->
+    <div class="controls">
+        <div class="nav-group">
+            <button class="btn-secondary" onclick="navigate(-1)">⬅️</button>
+            <span id="currentDateLabel" style="font-weight: bold; min-width: 100px; text-align: center;"></span>
+            <button class="btn-secondary" onclick="navigate(1)">➡️</button>
+            <button class="btn-secondary" onclick="goToToday()">Today</button>
+        </div>
+        <div class="action-group">
+            <button class="btn-secondary" id="btnDayView" onclick="switchView('day')">Day</button>
+            <button class="btn-secondary" id="btnWeekView" onclick="switchView('week')">Week</button>
+            <button class="btn-secondary" id="btnMonthView" onclick="switchView('month')">Month</button>
+            <button class="btn-secondary" onclick="cycleTheme()">🎨</button>
+            <button class="btn-secondary" onclick="exportData()">⬇️</button>
+            <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">⬆️</button>
+            <input type="file" id="fileInput" accept=".json" onchange="importData(this)">
+        </div>
+    </div>
+
+	<!-- 日视图 -->
+	<div id="dayViewSection" class="view-section active">
+		<!-- 新增：左右分栏布局容器 -->
+		<div class="day-view-layout">
+		    
+		    <!-- 左侧：任务添加区域 (约占35%宽度) -->
+		    <div class="left-panel">
+		        <div class="input-group">
+		            <!-- 日期选择字段 -->
+		            <div style="display: flex; flex-direction: column; gap: 5px;">
+		                <label for="datePicker" style="font-size: 12px; color: var(--text-muted); font-weight: bold;">📅 Date</label>
+		                <input type="date" id="datePicker" title="select a date" style="flex: 0 0 auto;">
+		            </div>
+
+		            <!-- 优先级选择字段 -->
+		            <div style="display: flex; flex-direction: column; gap: 5px;">
+		                <label for="prioritySelect" style="font-size: 12px; color: var(--text-muted); font-weight: bold;">🚩 Priority</label>
+		                <select id="prioritySelect" title="select priority">
+		                    <option value="low">Low</option>
+		                    <option value="medium" selected>Medium</option>
+		                    <option value="high">High</option>
+		                </select>
+		            </div>
+
+		            <!-- 任务标题输入字段 -->
+		            <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+		                <label for="taskInput" style="font-size: 12px; color: var(--text-muted); font-weight: bold;">📝 Task title</label>
+		                <input type="text" id="taskInput" title="input task title" placeholder="input task title..." onkeypress="handleEnter(event)">
+		            </div>
+
+		            <!-- 提交按钮 -->
+		            <div style="display: flex; flex-direction: column; gap: 5px; justify-content: flex-end;">
+		                <button class="btn-primary" onclick="addTask()" title="Add task">Add</button>
+		            </div>
+		        </div>
+		    </div>
+
+		    <!-- 右侧：任务列表展示区 (约占65%宽度) -->
+		    <div class="right-panel">
+		        <ul id="taskList"></ul>
+		        <div id="emptyMsg" class="empty-msg">No task today ✨</div>
+		    </div>
+
+		</div>
+	</div>
+
+    <!-- 周/月视图 -->
+    <div id="calendarViewSection" class="view-section">
+        <div class="calendar-header"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+</div>
+
+<!-- 任务详情弹窗 -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal">
+        <h3 id="modalTitle">Task details</h3>
+        <p style="font-size: 12px; color: var(--text-muted);">Created at：<span id="modalCreatedAt"></span></p>
+        <label for="modalDesc">Description: </label>
+        <textarea id="modalDesc" placeholder="input descriptions here"></textarea>
+        <div class="modal-actions">
+            <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn-primary" onclick="saveDetail()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 状态管理 ---
+    let currentDateObj = new Date();
+    let selectedDateStr = formatDateToString(new Date());
+    let currentView = 'day';
+    const themes = ['default', 'cyber', 'vintage'];
+    let currentThemeIndex = 0;
+    let currentEditingId = null; // 当前正在编辑详情的任务ID
+
+    // --- 安全日期工具函数 ---
+    function formatDateToString(date) {
+        if (!date || isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    function parseStringToDate(dateStr) {
+        if (!dateStr) return new Date();
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+
+    // --- 初始化 ---
+    window.onload = function() {
+        document.getElementById('datePicker').value = selectedDateStr;
+        updateUI();
+        const savedTheme = localStorage.getItem('myJournalTheme');
+        if (savedTheme && savedTheme !== 'default') {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            currentThemeIndex = themes.indexOf(savedTheme);
+        }
+    };
+
+    // --- 核心 UI 逻辑 ---
+    function updateUI() {
+        const label = document.getElementById('currentDateLabel');
+        if (currentView === 'day') {
+            selectedDateStr = formatDateToString(currentDateObj);
+            const datePicker = document.getElementById('datePicker');
+            if (datePicker) datePicker.value = selectedDateStr;
+            label.textContent = selectedDateStr;
+            renderTasks();
+        } else if (currentView === 'week') {
+            const startOfWeek = new Date(currentDateObj);
+            const day = startOfWeek.getDay();
+            startOfWeek.setDate(startOfWeek.getDate() - day);
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+            label.textContent = `${formatDateToString(startOfWeek)} to ${formatDateToString(endOfWeek)}`;
+            renderCalendarPreview('week', startOfWeek);
+        } else if (currentView === 'month') {
+            label.textContent = `${currentDateObj.getFullYear()} / ${currentDateObj.getMonth() + 1}`;
+            renderCalendarPreview('month', currentDateObj);
+        }
+    }
+    function navigate(direction) {
+        if (currentView === 'day') currentDateObj.setDate(currentDateObj.getDate() + direction);
+        else if (currentView === 'week') currentDateObj.setDate(currentDateObj.getDate() + direction * 7);
+        else if (currentView === 'month') currentDateObj.setMonth(currentDateObj.getMonth() + direction);
+        updateUI();
+    }
+    function goToToday() { currentDateObj = new Date(); selectedDateStr = formatDateToString(new Date()); updateUI(); }
+    function switchView(view) {
+        currentView = view;
+        ['btnDayView', 'btnWeekView', 'btnMonthView'].forEach(id => document.getElementById(id).classList.remove('btn-active'));
+        document.getElementById(`btn${view.charAt(0).toUpperCase() + view.slice(1)}View`).classList.add('btn-active');
+        if (view === 'day') {
+            document.getElementById('dayViewSection').classList.add('active');
+            document.getElementById('calendarViewSection').classList.remove('active');
+            document.getElementById('datePicker').style.display = 'inline-block';
+            updateUI();
+        } else {
+            document.getElementById('dayViewSection').classList.remove('active');
+            document.getElementById('calendarViewSection').classList.add('active');
+            document.getElementById('datePicker').style.display = 'none';
+            renderCalendarPreview();
+            updateUI();
+        }
+    }
+    function renderCalendarPreview(mode, baseDate) {
+        const grid = document.getElementById('calendarGrid');
+        grid.innerHTML = '';
+        let startDate, totalDays;
+        if (mode === 'month') {
+            const year = baseDate.getFullYear(); const month = baseDate.getMonth();
+            const firstDayOfMonth = new Date(year, month, 1);
+            startDate = new Date(firstDayOfMonth);
+            startDate.setDate(startDate.getDate() - firstDayOfMonth.getDay());
+            totalDays = new Date(year, month + 1, 0).getDate() + firstDayOfMonth.getDay();
+        } else { startDate = new Date(baseDate); totalDays = 7; }
+        const todayStr = formatDateToString(new Date());
+        const allTodos = getAllTodos();
+        for (let i = 0; i < totalDays; i++) {
+            const cellDate = new Date(startDate); cellDate.setDate(startDate.getDate() + i);
+            const dateStr = formatDateToString(cellDate);
+            const cell = document.createElement('div'); cell.className = 'calendar-day';
+            if (dateStr === todayStr) cell.classList.add('today');
+            if (mode === 'month' && cellDate.getMonth() !== baseDate.getMonth()) cell.style.opacity = '0.5';
+            const dayTodos = allTodos.filter(t => t.date === dateStr);
+            const incompleteCount = dayTodos.filter(t => !t.completed).length;
+            let indicatorHtml = '';
+            if (dayTodos.length > 0) {
+                const dots = Array(Math.min(dayTodos.length, 5)).fill('<div class="dot"></div>').join('');
+                indicatorHtml = `<div class="task-indicator">${dots}</div>`;
+                indicatorHtml += incompleteCount > 0 ? `<div class="task-count">${incompleteCount} imcomplete</div>` : `<div class="task-count">Done ✅</div>`;
+            }
+            cell.innerHTML = `<div class="day-number">${cellDate.getDate()}</div>${indicatorHtml}`;
+            cell.onclick = () => { currentDateObj = parseStringToDate(dateStr); switchView('day'); };
+            grid.appendChild(cell);
+        }
+    }
+
+    // --- 数据操作逻辑 ---
+    function getAllTodos() { return JSON.parse(localStorage.getItem('myJournalTodos')) || []; }
+    function saveAllTodos(todos) { localStorage.setItem('myJournalTodos', JSON.stringify(todos)); }
+
+    function addTask() {
+        const input = document.getElementById('taskInput');
+        const prioritySelect = document.getElementById('prioritySelect');
+        const text = input.value.trim();
+        if (!text) return;
+
+        const todos = getAllTodos();
+        const newTask = {
+            id: Date.now(),
+            date: selectedDateStr,
+            title: text,
+            description: "",
+            completed: false,
+            created_at: new Date().toISOString(),
+            finished_at: null,
+            priority: prioritySelect.value
+        };
+        todos.push(newTask);
+        saveAllTodos(todos);
+        input.value = '';
+        renderTasks();
+        if (currentView !== 'day') updateUI();
+    }
+
+    // 切换任务完成状态（自动记录/清除完成时间戳）
+    function toggleTask(id) {
+        const todos = getAllTodos();
+        const task = todos.find(t => t.id === id);
+        if (task) {
+            task.completed = !task.completed;
+            // 如果标记为完成，记录当前时间戳；如果取消完成，清空完成时间
+            task.finished_at = task.completed ? new Date().toISOString() : null;
+            saveAllTodos(todos);
+            renderTasks();
+            if (currentView !== 'day') updateUI();
+        }
+    }
+
+    function deleteTask(id) {
+        let todos = getAllTodos();
+        todos = todos.filter(t => t.id !== id);
+        saveAllTodos(todos);
+        renderTasks();
+        if (currentView !== 'day') updateUI();
+    }
+
+    function handleEnter(e) { if (e.key === 'Enter') addTask(); }
+
+    // 渲染任务列表（展示新字段：优先级、描述预览）
+    function renderTasks() {
+        const taskList = document.getElementById('taskList');
+        const emptyMsg = document.getElementById('emptyMsg');
+        taskList.innerHTML = '';
+        
+        const allTodos = getAllTodos();
+        // 过滤出当前选中日期的任务
+        const filteredTodos = allTodos.filter(todo => todo.date === selectedDateStr).sort((a, b) => b.id - a.id);
+        
+        if (filteredTodos.length === 0) { 
+            emptyMsg.style.display = 'block'; 
+        } else { 
+            emptyMsg.style.display = 'none'; 
+            filteredTodos.forEach(todo => {
+                const li = document.createElement('li'); 
+                if (todo.completed) li.classList.add('completed');
+                
+                // 获取优先级的颜色样式
+                const priorityClass = `p-${todo.priority || 'medium'}`;
+                // 如果有描述，显示预览文字
+                const descPreview = todo.description ? `<div class="task-desc-preview">${todo.description}</div>` : '';
+
+                li.innerHTML = `
+                    <input type="checkbox" class="task-checkbox" 
+                        ${todo.completed ? 'checked' : ''} 
+                        onchange="toggleTask(${todo.id})">
+                    <div class="task-info" onclick="openModal(${todo.id})">
+                        <div class="task-title">
+                            <span class="priority-dot ${priorityClass}"></span>
+                            ${todo.title}
+                        </div>
+                        ${descPreview}
+                    </div>
+                    <button class="delete-btn" onclick="deleteTask(${todo.id})">×</button>
+                `;
+                taskList.appendChild(li);
+            });
+        }
+    }
+
+    // --- 详情弹窗逻辑 ---
+    function openModal(id) {
+        const todos = getAllTodos();
+        const task = todos.find(t => t.id === id);
+        if (!task) return;
+
+        currentEditingId = id;
+        document.getElementById('modalTitle').textContent = task.title;
+        document.getElementById('modalCreatedAt').textContent = new Date(task.created_at).toLocaleString();
+        document.getElementById('modalDesc').value = task.description || '';
+        
+        document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('detailModal').style.display = 'none';
+        currentEditingId = null;
+    }
+
+    function saveDetail() {
+        if (!currentEditingId) return;
+        const todos = getAllTodos();
+        const task = todos.find(t => t.id === currentEditingId);
+        if (task) {
+            task.description = document.getElementById('modalDesc').value.trim();
+            saveAllTodos(todos);
+            renderTasks(); // 刷新列表以显示最新的描述预览
+            if (currentView !== 'day') updateUI();
+        }
+        closeModal();
+    }
+
+    // 点击遮罩层也可以关闭弹窗
+    document.getElementById('detailModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+
+    // --- 文件导入导出与主题切换 ---
+    function exportData() {
+        const dataStr = JSON.stringify(getAllTodos(), null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `journal_backup_${selectedDateStr}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function importData(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (Array.isArray(imported)) {
+                    if(confirm("Overwrite data ?")) {
+                        saveAllTodos(imported);
+                        switchView('day');
+                        renderTasks();
+                        alert("import successfully");
+                    }
+                } else {
+                    alert("file format is incorrect, make sure input file is a JSON file.");
+                }
+            } catch (err) {
+                alert("can not decode the input file, make sure it is a valid JSON file.");
+            }
+        };
+        reader.readAsText(file);
+        input.value = '';
+    }
+
+    function cycleTheme() {
+        currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+        const selectedTheme = themes[currentThemeIndex];
+        if (selectedTheme === 'default') document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', selectedTheme);
+        localStorage.setItem('myJournalTheme', selectedTheme);
+    }
+</script>
+
+
+
